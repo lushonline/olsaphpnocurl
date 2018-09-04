@@ -1,4 +1,4 @@
-# olsaphp
+# About
 Example code for performing [WS-Security UserNameToken](https://www.oasis-open.org/committees/download.php/13392/wss-v1.1-spec-pr-UsernameTokenProfile-01.htm) authentication for OLSA Web Services, utilising OpenSSL and PHP SoapClient
 
 Minimum PHP version that supports TLS 1.2 is PHP 5.5.19 with OpenSSL 1.0.1
