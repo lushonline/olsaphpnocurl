@@ -1,12 +1,46 @@
 <?php
 require_once('config.php');
 
+class OLSAException extends Exception {
+        
+	protected $olsarequest;
+	protected $olsaresponse;    
+	
+	public function __construct($message=null, $code = 0, Exception $previous = null, $request=null, $response=null) {
+		parent::__construct($message, $code, $previous);
+		
+		$this -> olsarequest = $request;
+		$this -> olsaresponse = $response;
+	}
+	
+	public function getOLSARequest()
+	{
+		return $this -> olsarequest;
+	}
+
+	public function getOLSAResponse()
+	{
+		return $this -> olsaresponse;
+	}
+}
+
+function prettyPrintXML($outXML)
+{
+	$xml = new DOMDocument(); 
+	$xml->preserveWhiteSpace = false; 
+	$xml->formatOutput = true; 
+	$xml->loadXML($outXML); 
+	$outXML = $xml->saveXML();
+	print_r($outXML);
+}
+
+
 function getskillport8profilesoap($id, $value) {
   $txt = sprintf('<ns1:fieldValue id="%s"><ns1:value>%s</ns1:value></ns1:fieldValue>',$id,$value);
   return new SoapVar($txt,XSD_ANYXML);
 }
 
-function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$assetid=null, $ctx=null) {
+function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$assetid=null, $ctx=null, $debug=true) {
 	global $CFG;
 	//Include the SOAP Client code
 	include('WSSUserNameTokenSoapClient.class.php');
@@ -159,7 +193,7 @@ function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$
 			//Check the values in the web.config are correct for OLSA.CustomerID and OLSA.SharedSecret - these are case sensitive
 			//Check the time on the machine, the SOAP message is valid for 5 minutes. This means that if the time on the calling machine
 			//is to slow OR to fast then the SOAP message will be invalid.
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "the property '_pathid_' or '_orgcode_' must be specified") == false)
 		{
@@ -171,7 +205,8 @@ function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$
 			//SkillPort.
 			//You would capture this exception and resubmit the request now including the "default"
 			//orgcode.
-			throw $fault;
+			
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "invalid new username") == false)
 		{
@@ -180,7 +215,7 @@ function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$
 			//Cannot start with apostrophe (') or dash (-)
 			//Non-breaking white spaces (space, tab, new line) are not allowed in login names
 			//No double-byte characters are allowed (e.g. Japanese or Chinese characters)
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "invalid password") == false)
 		{
@@ -188,36 +223,34 @@ function Skillport8ExtendedSSO($username,$groupcode="skillsoft",$action="home",$
 			//All single-byte characters are allowed except back slash (\)
 			//Non-breaking white spaces (space, tab, new line) are not allowed
 			//No double-byte characters are allowed (e.g. Japanese or Chinese characters)
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "enter a valid email address") == false)
 		{
 			//The email address specified is not a valid SMTP email address
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "error: org code") == false)
 		{
-			//The single orgcode specified in the _req.groupCode is not valid
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "user group with orgcode") == false)
 		{
-			//One of the multiple orgcodes specified in the _req.groupCode is not valid
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		elseif (!stripos($fault->getmessage(), "field is too long") == false)
 		{
-			//One of the fields specified, see full faultstring for which, is too large
-			//Generally text fields can be 255 characters in length
-			throw $fault;
+			throw new OLSAException($fault->getmessage(),$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
 		else
 		{
-			echo $fault->getmessage();
-			//Any other SOAP exception not handled above
-			throw $fault;
+			throw new OLSAException("Unknown OLSA SOAPFault",$fault->getCode(), $fault,$client->__getLastRequest(),$client->__getLastResponse());
 		}
-    }
+    } 
+	catch (Exception $e)
+	{
+			throw new OLSAException($e->getMessage(),$e->getCode(), $e,$client->__getLastRequest(),$client->__getLastResponse());
+   	}
    
     if (isset($result->olsaURL)) {
 		 return $result->olsaURL;
@@ -278,7 +311,18 @@ function callOlsaSSO($username,$groupcode="skillsoft",$action="home",$assetid=nu
 	print "Action: ".$action."\r\n";
 	print "Assetid: ".$assetid."\r\n";
 	
-	$result = Skillport8ExtendedSSO($username, $groupcode, $action, $assetid, $ctx);
+	try {
+		$result = Skillport8ExtendedSSO($username, $groupcode, $action, $assetid, $ctx);
+	}
+	catch(OLSAException $oe) {
+		print "\r\n"."++++++++++++++++++++++++++++++++++++++++"."\r\n";
+		print "An Exception Occured when calling OLSA: ".$oe->getMessage()."\r\n";
+		print "\r\n"."========= OLSA SOAP REQUEST ==========" . "\r\n";
+		prettyPrintXML($oe->getOLSARequest());
+		print "\r\n"."========= OLSA SOAP RESPONSE =========" . "\r\n";
+		prettyPrintXML($oe->getOLSAResponse());	
+		print "\r\n"."----------------------------------------"."\r\n";
+	}
 	
 	if (isset($result)) {
 		 print "OLSA URL: ".$result."\r\n";
