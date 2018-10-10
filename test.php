@@ -271,14 +271,42 @@ function testTLSConnection($ctx=null)
 	try {
 		$content = file_get_contents($wsdl,false,$ctx);
 
+		//Use 400 response if no PHP http headers returned by PHP HTTP wrapper
+		$hdrs = array('HTTP/1.1 400 Bad request');
+		if (!empty($http_response_header)) {
+			 $hdrs = $http_response_header;
+		};
+		
 		if ($content === false) {
 			// Handle the error
 			print "WSDL Download: Fail"."\r\n";
+			print "\r\n"."++++++++++++++++++++++++++++++++++++++++"."\r\n";
+			print "Returned Data"."\r\n";
+			print "HTTP Response Headers"."\r\n";
+			print_r($hdrs);
+			print "\r\n"."----------------------------------------"."\r\n";
 			return false;
 		} else {
-			print "WSDL Download: Success"."\r\n";
+			//Check the contents is the Skillsoft WSDL by looking at first
+			if (strpos($content, 'xmlns:olsa="http://www.skillsoft.com/services/olsa_v1_0/"') !== false) {
+				print "WSDL Download: Success"."\r\n";
+				return true;
+			} else {
+				print "WSDL Download: Fail. Returned WSDL did not contain Skillsoft OLSA NameSpace xmlns:olsa=\"http://www.skillsoft.com/services/olsa_v1_0/\""."\r\n";
+				print "\r\n"."++++++++++++++++++++++++++++++++++++++++"."\r\n";
+				print "Returned Data"."\r\n";
+				print "HTTP Response Headers"."\r\n";
+				print_r($hdrs);
+				print "\r\n";
+				print "Contents"."\r\n";
+				print_r($content);
+				print "\r\n"."----------------------------------------"."\r\n";
+				return false;
+			}
+			return false;
+			
 			//print_r($content);
-			return true;
+			
 		}
 	} catch (Exception $e) {
 		// Handle exception
@@ -339,14 +367,14 @@ function callOlsaSSO($username,$groupcode="skillsoft",$action="home",$assetid=nu
 		$opts = array( 
 		  'ssl' =>array( 
 			'crypto_method' => STREAM_CRYPTO_METHOD_TLS_CLIENT,
-		  ) 
-		);
+		  )
+		); 
 		if (version_compare(PHP_VERSION, '5.6') >= 0) {
 			//For >PHP 5.6 force TLS1.2 client explicitly
 			$opts = array( 
 			  'ssl' =>array( 
 				'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
-			  ) 
+			  )
 			); 
 			print "Stream Content Options. [ssl][crypto_method]: "."STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT"."\r\n";
 		} else {
